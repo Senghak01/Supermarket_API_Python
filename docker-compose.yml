@@ -1,0 +1,63 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: --default-authentication-plugin=caching_sha2_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-supermarket_db}
+      MYSQL_USER: ${MYSQL_USER:-supermarket}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Database is internal only: no public port published
+    networks:
+      - supermarket-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-supermarket}:${MYSQL_PASSWORD:-apppassword}@db:3306/${MYSQL_DATABASE:-supermarket_db}?charset=utf8mb4
+    depends_on:
+      db:
+        condition: service_healthy
+    # API port internal only: accessed via Caddy reverse proxy
+    networks:
+      - supermarket-net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - supermarket-net
+
+networks:
+  supermarket-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:
+
