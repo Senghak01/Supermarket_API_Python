@@ -33,3 +33,6 @@ htmlcov/
 *.log
 scratch/
 
+# Node (frontend)
+node_modules/
+
